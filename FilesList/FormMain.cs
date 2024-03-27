@@ -1,26 +1,36 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Windows.Forms;
 
 namespace FilesList
 {
     public partial class FormMain : Form
     {
-        List<string> filesList = new List<string>();
+        List<string> outList = new List<string>();
+        string reader = Path.Combine(Environment.ExpandEnvironmentVariables("%ProgramW6432%"), "7z", "7z.exe");
         int pathLength = 0;
 
         public FormMain()
         {
             InitializeComponent();
+            if (!File.Exists(reader))
+            {
+                reader = Path.Combine(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName), "7z.exe");
+                if (!File.Exists(reader))
+                {
+                    ClientSize = new System.Drawing.Size(312, 51);
+                    button2.Visible = false;
+                }
+            }
         }
 
         void button1_Click(object sender, EventArgs e)
         {
             button1.Text = "Работает";
-            button1.Enabled = false;
-            checkBox1.Enabled = false;
-            checkBox2.Enabled = false;
+            enableDisable(false);
             DialogResult result = folderBrowserDialog1.ShowDialog();
             if (result == DialogResult.OK)
             {
@@ -28,20 +38,111 @@ namespace FilesList
                 searchFolder(folderBrowserDialog1.SelectedPath);
                 DirectoryInfo info = new DirectoryInfo(folderBrowserDialog1.SelectedPath);
                 string file = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), info.Parent != null ? info.Name + ".txt" : info.Name.Remove(1) + ".txt");
+                writeFile(file);
+            }
+            enableDisable(true);
+            button1.Text = "Путь";
+        }
+
+        void button2_Click(object sender, EventArgs e)
+        {
+            button2.Text = "Работает";
+            enableDisable(false);
+            DialogResult result = openFileDialog1.ShowDialog();
+            if (result == DialogResult.OK)
+            {
+                string[] output = null;
                 try
                 {
-                    File.WriteAllLines(file, filesList);
+                    Process process = new Process();
+                    process.StartInfo.UseShellExecute = false;
+                    process.StartInfo.RedirectStandardOutput = true;
+                    process.StartInfo.StandardOutputEncoding = Encoding.GetEncoding(866);
+                    process.StartInfo.FileName = reader;
+                    process.StartInfo.Arguments = "l -slt \"" + openFileDialog1.FileNames[0] + "\"";
+                    process.Start();
+                    output = process.StandardOutput.ReadToEnd().Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+                    process.WaitForExit();
                 }
                 catch
                 {
-                    MessageBox.Show("Не удалось записать файл: " + file);
+                    MessageBox.Show("Не удалось запустить: " + reader + " va \"" + openFileDialog1.FileNames[0] + "\"");
                 }
-                filesList.Clear();
+                if (output != null)
+                {
+                    string path = null;
+                    string size = null;
+                    string modified = null;
+                    string crc = null;
+                    bool folder = false;
+                    bool start = false;
+                    bool end = false;
+                    int count = output.Length;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (!start && output[i].StartsWith("----------"))
+                        {
+                            start = true;
+                        }
+                        else if (start)
+                        {
+                            end = i + 1 == count;
+                            if (!String.IsNullOrEmpty(output[i]) || end)
+                            {
+                                if (end || output[i].StartsWith("Path = "))
+                                {
+                                    if (!String.IsNullOrEmpty(path) && !String.IsNullOrEmpty(size) && !String.IsNullOrEmpty(modified) && !String.IsNullOrEmpty(crc))
+                                    {
+                                        if (folder)
+                                        {
+                                            outList.Add(path + (checkBox1.Checked ? "\t" + modified : ""));
+                                        }
+                                        else
+                                        {
+                                            outList.Add(path + (checkBox2.Checked ? "\t" + crc : "") + (checkBox1.Checked ? "\t" + size + "\t" + modified : ""));
+                                        }
+                                    }
+                                    path = null;
+                                    size = null;
+                                    modified = null;
+                                    crc = null;
+                                    folder = false;
+                                    if (!end)
+                                    {
+                                        path = output[i].Remove(0, 7);
+                                    }
+                                }
+                                else if (output[i].StartsWith("Folder = "))
+                                {
+                                    folder = output[i].Remove(0, 9) == "+";
+                                }
+                                else if (output[i].StartsWith("Size = "))
+                                {
+                                    size = output[i].Remove(0, 7);
+                                }
+                                else if (output[i].StartsWith("Modified = "))
+                                {
+                                    modified = output[i].Remove(0, 11);
+                                    modified = modified.Remove(modified.IndexOf('.'));
+                                    DateTime parse;
+                                    if (DateTime.TryParse(modified, out parse))
+                                    {
+                                        modified = parse.ToString();
+                                    }
+                                }
+                                else if (output[i].StartsWith("CRC = "))
+                                {
+                                    crc = output[i].Remove(0, 6);
+                                }
+                            }
+                        }
+                    }
+                    string file = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), Path.GetFileNameWithoutExtension(openFileDialog1.FileNames[0]) + ".txt");
+                    writeFile(file);
+                }
             }
-            checkBox2.Enabled = true;
-            checkBox1.Enabled = true;
-            button1.Enabled = true;
-            button1.Text = "Путь";
+            enableDisable(true);
+            button2.Text = "Архив";
         }
 
         void searchFolder(string path)
@@ -51,6 +152,14 @@ namespace FilesList
             {
                 if (Directory.Exists(line) && (new DirectoryInfo(line).Attributes & FileAttributes.System) != FileAttributes.System)
                 {
+                    try
+                    {
+                        outList.Add(line.Remove(0, pathLength) + (checkBox1.Checked ? "\t" + Directory.GetLastWriteTime(line) : ""));
+                    }
+                    catch
+                    {
+                        outList.Add(line.Remove(0, pathLength) + "\tNO ACCESS TO FOLDER");
+                    }
                     searchFolder(line);
                 }
             }
@@ -58,17 +167,18 @@ namespace FilesList
 
         void getFilesList(string path)
         {
-            foreach (string file in getFiles(path))
+            foreach (string line in getFiles(path))
             {
-                if (!File.GetAttributes(file).HasFlag(FileAttributes.System))
+                if (!File.GetAttributes(line).HasFlag(FileAttributes.System))
                 {
                     try
                     {
-                        filesList.Add(file.Remove(0, pathLength) + (checkBox2.Checked ? "\t" + getCRC(file) : "") + (checkBox1.Checked ? "\t" + new FileInfo(file).Length + "\t" + new FileInfo(file).LastWriteTime : ""));
+                        FileInfo info = new FileInfo(line);
+                        outList.Add(line.Remove(0, pathLength) + (checkBox2.Checked ? "\t" + getCRC(line) : "") + (checkBox1.Checked ? "\t" + info.Length + "\t" + info.LastWriteTime + (info.IsReadOnly ? "\tREAD-ONLY" : "") : ""));
                     }
                     catch
                     {
-                        filesList.Add(file.Remove(0, pathLength) + "\tNO ACCESS TO FILE");
+                        outList.Add(line.Remove(0, pathLength) + "\tNO ACCESS TO FILE");
                     }
                 }
             }
@@ -96,22 +206,6 @@ namespace FilesList
             {
                 return new string[] { };
             }
-        }
-
-        string pathAddSlash(string path)
-        {
-            if (!path.EndsWith("/") && !path.EndsWith(@"\"))
-            {
-                if (path.Contains("/"))
-                {
-                    path += "/";
-                }
-                else if (path.Contains(@"\"))
-                {
-                    path += @"\";
-                }
-            }
-            return path;
         }
 
         string getCRC(string file)
@@ -167,6 +261,43 @@ namespace FilesList
             table = null;
             stream.Close();
             return ~result;
+        }
+
+        void writeFile(string file)
+        {
+            try
+            {
+                File.WriteAllLines(file, outList);
+            }
+            catch
+            {
+                MessageBox.Show("Не удалось записать файл: " + file);
+            }
+            outList.Clear();
+        }
+
+        void enableDisable(bool enable)
+        {
+            button1.Enabled = enable;
+            button2.Enabled = enable;
+            checkBox1.Enabled = enable;
+            checkBox2.Enabled = enable;
+        }
+
+        string pathAddSlash(string path)
+        {
+            if (!path.EndsWith("/") && !path.EndsWith(@"\"))
+            {
+                if (path.Contains("/"))
+                {
+                    path += "/";
+                }
+                else if (path.Contains(@"\"))
+                {
+                    path += @"\";
+                }
+            }
+            return path;
         }
     }
 }
