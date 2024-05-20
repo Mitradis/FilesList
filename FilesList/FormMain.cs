@@ -29,7 +29,6 @@ namespace FilesList
 
         void button1_Click(object sender, EventArgs e)
         {
-            button1.Text = "Работает";
             enableDisable(false);
             DialogResult result = folderBrowserDialog1.ShowDialog();
             if (result == DialogResult.OK)
@@ -46,7 +45,6 @@ namespace FilesList
 
         void button2_Click(object sender, EventArgs e)
         {
-            button2.Text = "Работает";
             enableDisable(false);
             DialogResult result = openFileDialog1.ShowDialog();
             if (result == DialogResult.OK)
@@ -152,13 +150,16 @@ namespace FilesList
             {
                 if (Directory.Exists(line) && (new DirectoryInfo(line).Attributes & FileAttributes.System) != FileAttributes.System)
                 {
-                    try
+                    if (checkBox4.Checked)
                     {
-                        outList.Add(line.Remove(0, pathLength) + (checkBox1.Checked ? "\t" + Directory.GetLastWriteTime(line) : ""));
-                    }
-                    catch
-                    {
-                        outList.Add(line.Remove(0, pathLength) + "\tNO ACCESS TO FOLDER");
+                        try
+                        {
+                            outList.Add(line.Remove(0, pathLength) + (checkBox1.Checked ? "\t" + Directory.GetLastWriteTime(line) : ""));
+                        }
+                        catch
+                        {
+                            outList.Add(line.Remove(0, pathLength) + "\tNO ACCESS TO FOLDER");
+                        }
                     }
                     searchFolder(line);
                 }
@@ -174,7 +175,7 @@ namespace FilesList
                     try
                     {
                         FileInfo info = new FileInfo(line);
-                        outList.Add(line.Remove(0, pathLength) + (checkBox2.Checked ? "\t" + getCRC(line) : "") + (checkBox1.Checked ? "\t" + info.Length + "\t" + info.LastWriteTime + (info.IsReadOnly ? "\tREAD-ONLY" : "") : ""));
+                        outList.Add(line.Remove(0, pathLength) + (checkBox2.Checked ? "\t" + getCRC(line) : "") + (checkBox1.Checked ? "\t" + info.Length + "\t" + info.LastWriteTime : "") + (checkBox3.Checked && info.IsReadOnly ? "\tREAD-ONLY" : ""));
                     }
                     catch
                     {
@@ -278,10 +279,13 @@ namespace FilesList
 
         void enableDisable(bool enable)
         {
+            button1.Text = "Работает";
             button1.Enabled = enable;
             button2.Enabled = enable;
             checkBox1.Enabled = enable;
             checkBox2.Enabled = enable;
+            checkBox3.Enabled = enable;
+            checkBox4.Enabled = enable;
         }
 
         string pathAddSlash(string path)
