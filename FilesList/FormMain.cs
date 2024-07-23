@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -10,20 +11,28 @@ namespace FilesList
     public partial class FormMain : Form
     {
         List<string> outList = new List<string>();
-        string reader = Path.Combine(Environment.ExpandEnvironmentVariables("%ProgramW6432%"), "7z", "7z.exe");
+        string reader = null;
         int pathLength = 0;
 
         public FormMain()
         {
             InitializeComponent();
-            if (!File.Exists(reader))
+            RegistryKey baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            RegistryKey regkey = baseKey.OpenSubKey("SOFTWARE\\7-Zip", true);
+            bool found = false;
+            if (regkey != null)
             {
-                reader = Path.Combine(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName), "7z.exe");
-                if (!File.Exists(reader))
+                string path = (string)regkey.GetValue("Path");
+                if (path != null && File.Exists(Path.Combine(path, "7z.exe")))
                 {
-                    ClientSize = new System.Drawing.Size(312, 51);
-                    button2.Visible = false;
+                    reader = Path.Combine(path, "7z.exe");
+                    found = true;
                 }
+            }
+            if (!found)
+            {
+                ClientSize = new System.Drawing.Size(318, 51);
+                button2.Visible = false;
             }
         }
 
@@ -40,7 +49,6 @@ namespace FilesList
                 writeFile(file);
             }
             enableDisable(true);
-            button1.Text = "Путь";
         }
 
         void button2_Click(object sender, EventArgs e)
@@ -140,7 +148,6 @@ namespace FilesList
                 }
             }
             enableDisable(true);
-            button2.Text = "Архив";
         }
 
         void searchFolder(string path)
@@ -279,7 +286,7 @@ namespace FilesList
 
         void enableDisable(bool enable)
         {
-            button1.Text = "Работает";
+            button1.Text = enable ? "Путь" : "Работает";
             button1.Enabled = enable;
             button2.Enabled = enable;
             checkBox1.Enabled = enable;
