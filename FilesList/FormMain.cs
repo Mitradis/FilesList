@@ -19,6 +19,7 @@ namespace FilesList
             InitializeComponent();
             RegistryKey baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
             RegistryKey regkey = baseKey.OpenSubKey("SOFTWARE\\7-Zip", true);
+            baseKey.Dispose();
             bool found = false;
             if (regkey != null)
             {
@@ -29,6 +30,7 @@ namespace FilesList
                     found = true;
                 }
             }
+            regkey.Dispose();
             if (!found)
             {
                 ClientSize = new System.Drawing.Size(318, 51);
@@ -101,7 +103,10 @@ namespace FilesList
                                     {
                                         if (folder)
                                         {
-                                            outList.Add(path + (checkBox1.Checked ? "\t" + modified : ""));
+                                            if (checkBox4.Checked)
+                                            {
+                                                outList.Add(path + (checkBox1.Checked ? "\t" + modified : ""));
+                                            }
                                         }
                                         else
                                         {
@@ -275,6 +280,7 @@ namespace FilesList
         {
             try
             {
+                outList.Sort();
                 File.WriteAllLines(file, outList);
             }
             catch
